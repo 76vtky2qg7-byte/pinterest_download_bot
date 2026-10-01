@@ -17,7 +17,14 @@ function environment() {
   const sql = new DatabaseSync(':memory:');
   sql.exec(readFileSync(new URL('../migrations/0001_updates.sql', import.meta.url),'utf8'));
   // D1's external interface, backed by actual SQLite and the actual migration.
-  const DB={prepare(query){return {bind(...values){return {async run(){const r=sql.prepare(query).run(...values);return {success:true,meta:{changes:Number(r.changes)}};}};}};}};
+  const DB={prepare(query){
+    const statement=(values=[])=>({
+      bind(...bound){return statement(bound);},
+      async run(){const r=sql.prepare(query).run(...values);return {success:true,meta:{changes:Number(r.changes)}};},
+      async first(){return sql.prepare(query).get(...values) || null;}
+    });
+    return statement();
+  }};
   return {env:{DB,BOT_TOKEN:'test-token',WEBHOOK_SECRET:'test-secret',ALLOWED_USER_ID:'123'},sql};
 }
 const request=(update,secret='test-secret')=>new Request('https://bot.example/webhook',{method:'POST',headers:{'content-type':'application/json','x-telegram-bot-api-secret-token':secret},body:JSON.stringify(update)});
@@ -39,6 +46,53 @@ test('start responds and duplicate/concurrent update is claimed only once',async
   const responses=await Promise.all([handleRequest(request(update()),env,network),handleRequest(request(update()),env,network)]);
   assert.deepEqual(responses.map(r=>r.status),[200,200]);assert.equal(sends,1);
   assert.equal(sql.prepare('SELECT status FROM updates WHERE update_id=1').get().status,'done');sql.close();
+});
+test('start and menu buttons return a persistent keyboard without contacting Pinterest',async()=>{
+  const {env,sql}=environment();
+  for(const [i,text] of ['/start','Скачать видео','Помощь','/menu'].entries()){
+    const messages=[];
+    await handleRequest(request(update(i+1,123,text)),env,async(u,opts)=>{
+      assert.ok(String(u).endsWith('/sendMessage'));
+      messages.push(JSON.parse(opts.body));
+      return Response.json({ok:true,result:{message_id:i+1}});
+    });
+    assert.equal(messages.length,1);
+    assert.deepEqual(messages[0].reply_markup.keyboard,[[{text:'Скачать видео'}],[{text:'Помощь'},{text:'Статистика'}]]);
+    assert.equal(messages[0].reply_markup.is_persistent,true);
+    assert.equal(messages[0].reply_markup.resize_keyboard,true);
+    if(text==='Скачать видео')assert.match(messages[0].text,/Копировать ссылку/);
+    else assert.match(messages[0].text,/Максимум 49 МБ/);
+    assert.equal(sql.prepare('SELECT status FROM updates WHERE update_id=?').get(i+1).status,'done');
+  }
+  sql.close();
+});
+test('statistics count only recent download attempts, excluding commands and unknown historical requests',async()=>{
+  const {env,sql}=environment();let stats='';
+  const network=async(u,opts)=>{
+    if(String(u)==='https://www.pinterest.com/pin/321/')return new Response(primary);
+    if(String(u)===video.url)return new Response(bytes,{headers:{'content-type':'video/mp4'}});
+    if(String(u)==='https://www.pinterest.com/pin/404/')return new Response('blocked',{status:403});
+    if(String(u).endsWith('/sendVideo'))await new Response(opts.body).arrayBuffer();
+    else if(JSON.parse(opts.body).text.includes('Статистика'))stats=JSON.parse(opts.body).text;
+    return Response.json({ok:true,result:{message_id:42}});
+  };
+  await handleRequest(request(update(1,123,'/start')),env,network);
+  await handleRequest(request(update(2,123,'https://pinterest.com/pin/321/')),env,network);
+  await handleRequest(request(update(2,123,'https://pinterest.com/pin/321/')),env,network);
+  await handleRequest(request(update(3,123,'https://pinterest.com/pin/404/')),env,network);
+  const insert=sql.prepare('INSERT INTO updates (update_id,status,created_at) VALUES (?,?,?)');
+  insert.run(80,'done',Date.now());
+  insert.run(81,'done',Date.now()-8*86400000);
+  insert.run(82,'processing',Date.now());
+  sql.prepare('INSERT INTO download_requests (update_id,created_at) VALUES (?,?)').run(81,Date.now()-8*86400000);
+  sql.prepare('INSERT INTO download_requests (update_id,created_at) VALUES (?,?)').run(82,Date.now());
+  await handleRequest(request(update(4,123,'Статистика')),env,network);
+  assert.match(stats,/Скачано видео: 1/);
+  assert.match(stats,/Ошибок скачивания: 1/);
+  assert.match(stats,/Не завершены: 1/);
+  assert.match(stats,/с обновления меню/);
+  assert.equal(sql.prepare('SELECT count(*) AS n FROM download_requests WHERE update_id=81').get().n,0);
+  sql.close();
 });
 test('missing configuration fails closed; malformed request and wrong routes are rejected',async()=>{
   const {env,sql}=environment();

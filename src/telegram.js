@@ -3,6 +3,12 @@ import { checkedMediaUrl } from './pinterest.js';
 
 export const MAX_VIDEO_BYTES = 49_000_000;
 const encoder = new TextEncoder();
+const keyboard = {
+  keyboard: [[{text:'Скачать видео'}],[{text:'Помощь'},{text:'Статистика'}]],
+  resize_keyboard:true,
+  is_persistent:true,
+  input_field_placeholder:'Вставь ссылку Pinterest'
+};
 function apiUrl(env, method) { return `https://api.telegram.org/bot${env.BOT_TOKEN}/${method}`; }
 async function apiResult(response) {
   let data;
@@ -14,7 +20,7 @@ async function apiResult(response) {
 export async function sendMessage(env, chatId, text, fetcher = fetch, signal) {
   return apiResult(await fetcher(apiUrl(env,'sendMessage'), {
     method:'POST',signal,headers:{'content-type':'application/json'},
-    body:JSON.stringify({chat_id:chatId,text,link_preview_options:{is_disabled:true}})
+    body:JSON.stringify({chat_id:chatId,text,link_preview_options:{is_disabled:true},reply_markup:keyboard})
   }));
 }
 export async function sendVideo(env, chatId, video, fetcher = fetch, signal) {

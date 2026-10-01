@@ -33,7 +33,7 @@ try {
   if (!health.ok || !(await health.json()).ok) throw Error('Worker ещё не настроен: проверь DB и три секретных переменных.');
   const bot=await api('getMe',{});
   await api('setWebhook',{url:new URL('/webhook',botUrl).href,secret_token:secret,allowed_updates:['message'],max_connections:1,drop_pending_updates:false});
-  await api('setMyCommands',{commands:[{command:'start',description:'Начать скачивание видео Pinterest'},{command:'help',description:'Как пользоваться ботом'}]});
+  await api('setMyCommands',{commands:[{command:'start',description:'Открыть панель бота'},{command:'menu',description:'Показать кнопки'},{command:'download',description:'Скачать видео Pinterest'},{command:'stats',description:'Статистика скачиваний'},{command:'help',description:'Как пользоваться ботом'}]});
   const info=await api('getWebhookInfo',{});
   if(info.url!==new URL('/webhook',botUrl).href)throw Error('Telegram не подтвердил адрес webhook.');
   console.log(`Webhook подключён. Открой https://t.me/${bot.username} и отправь /start.`);

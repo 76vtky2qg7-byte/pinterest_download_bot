@@ -9,6 +9,12 @@ function configured(env) {
 export async function handleRequest(request, env, fetcher = fetch) {
   const path = new URL(request.url).pathname;
   if (request.method === 'GET' && path === '/health') return Response.json({ok:configured(env)}, {status:configured(env)?200:503});
+  // Temporary read-only probe: one fixed public pin, no user input or credentials.
+  if (request.method === 'GET' && path === '/diagnostics/pinterest') {
+    const response=await fetcher('https://www.pinterest.com/pin/914090055622372740/',{redirect:'manual',signal:AbortSignal.timeout(20_000),headers:{accept:'text/html'}});
+    const html=await readLimited(response,5_000_000);
+    return new Response(html,{status:response.status,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store'}});
+  }
   if (path !== '/webhook' || request.method !== 'POST') return new Response('Not found',{status:404});
   if (!configured(env)) return new Response('Bot not configured',{status:503});
   if (request.headers.get('x-telegram-bot-api-secret-token') !== env.WEBHOOK_SECRET) return new Response('Forbidden',{status:403});

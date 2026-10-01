@@ -26,6 +26,19 @@ const bytes=new Uint8Array([0,0,0,24,102,116,121,112,105,115,111,109,0,0,0,0,65,
 const video={url:'https://v1.pinimg.com/example.mp4',pinId:'321',duration:16};
 const primary='<script id="video-snippet" type="application/ld+json">{"@type":"VideoObject","contentUrl":"https://v1.pinimg.com/example.mp4"}</script>';
 
+test('temporary Pinterest probe only fetches the fixed public pin without using Telegram credentials',async()=>{
+  const response=await handleRequest(new Request('https://bot.example/diagnostics/pinterest'),{},async(url,opts)=>{
+    assert.equal(url,'https://www.pinterest.com/pin/914090055622372740/');
+    assert.equal(opts.redirect,'manual');
+    assert.equal(opts.headers.accept,'text/html');
+    assert.ok(!opts.headers.authorization);
+    return new Response('public pin HTML');
+  });
+  assert.equal(response.status,200);
+  assert.equal(await response.text(),'public pin HTML');
+  assert.equal(response.headers.get('cache-control'),'no-store');
+});
+
 test('wrong webhook secret and foreign users never reach Telegram or database claim',async()=>{
   const {env,sql}=environment();
   const noNetwork=()=>{throw Error('network forbidden');};

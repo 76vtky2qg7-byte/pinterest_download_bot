@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pinterest-download-bot",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "observability": { "enabled": true }
+  // `wrangler d1 create pinterest-bot --binding DB --update-config`
+  // adds the real D1 database binding here. No fabricated database ID.
+  // BOT_TOKEN, WEBHOOK_SECRET and ALLOWED_USER_ID are Wrangler secrets.
+}

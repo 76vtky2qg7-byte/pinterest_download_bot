@@ -74,9 +74,18 @@ export function parseVideo(html, pinId) {
   for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
     const attrs = match[1];
     const id = attrs.match(/\bid\s*=\s*["']([^"']+)["']/i)?.[1];
-    if (!['video-snippet', '__PWS_DATA__', '__PWS_INITIAL_PROPS__'].includes(id)) continue;
+    const isRelay = /\bdata-relay-completed-request\s*=\s*["']true["']/i.test(attrs);
+    if (!isRelay && !['video-snippet', '__PWS_DATA__', '__PWS_INITIAL_PROPS__'].includes(id)) continue;
+    let json = match[2];
+    if (isRelay) {
+      // Pinterest streams Relay results as a registration call. Parse only its
+      // literal JSON argument; never execute scripts from the remote page.
+      const payload = json.match(/^\s*window\.__PWS_RELAY_REGISTER_COMPLETED_REQUEST__\(\s*"(?:\\.|[^"\\])*"\s*,\s*(\{[\s\S]*\})\s*\)\s*;\s*$/);
+      if (!payload) continue;
+      json = payload[1];
+    }
     let data;
-    try { data = JSON.parse(match[2]); } catch { continue; }
+    try { data = JSON.parse(json); } catch { continue; }
     if (id === 'video-snippet') {
       const items = Array.isArray(data) ? data : [data];
       for (const item of items) if (item['@type'] === 'VideoObject') { const c = candidate(item); if (c) dedicated.push(c); }

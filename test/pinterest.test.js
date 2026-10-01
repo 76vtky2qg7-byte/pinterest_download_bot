@@ -33,6 +33,19 @@ test('legacy pin data chooses largest published MP4 of requested pin only', () =
   const html=`<script id="__PWS_DATA__" type="application/json">${JSON.stringify({pins:[{id:'123',videos:{video_list:{small:{url:mp4,width:360,height:640},large:{url:'https://v1.pinimg.com/large.mp4',width:720,height:1280,duration:16000}}}},{id:'999',videos:{video_list:{other:{url:'https://v1.pinimg.com/other.mp4',width:4000,height:4000}}}}]})}</script>`;
   assert.equal(parseVideo(html,'123').url,'https://v1.pinimg.com/large.mp4');
 });
+test('streamed Relay pin response extracts its own MP4 and excludes recommendations', () => {
+  const pin={id:'UGluOjEyMw==',entityId:'123',videos:{videoUrls:[mp4],videoList:{vHLSV4:{url:'https://v1.pinimg.com/a.m3u8',width:2160,height:3840,duration:16867},v720P:{url:mp4,width:2160,height:3840,duration:16867},__typename:'VideoList'}},relatedPins:[{entityId:'999',videos:{videoList:{v720P:{url:'https://v1.pinimg.com/other.mp4',width:4000,height:4000}}}}]};
+  const html=`<script data-relay-completed-request="true" nonce="example" type="text/javascript">window.__PWS_RELAY_REGISTER_COMPLETED_REQUEST__("%7B%22variables%22%3A%7B%22pinId%22%3A%22123%22%7D%7D", ${JSON.stringify({data:{v3GetPinQueryv2:{__typename:'PinResponse',data:pin}}})});</script>`;
+  assert.deepEqual(parseVideo(html,'123'),{url:mp4,width:2160,height:3840,duration:16.867});
+  assert.throws(()=>parseVideo(html,'456'),{code:'NO_MP4'});
+});
+test('Relay script parsing rejects executable payloads, unmarked scripts and malformed JSON', () => {
+  for(const body of ['window.__PWS_RELAY_REGISTER_COMPLETED_REQUEST__("key", {bad});','window.__PWS_RELAY_REGISTER_COMPLETED_REQUEST__("key", {"data": {}}); globalThis.injection = true;','window.__PWS_RELAY_REGISTER_COMPLETED_REQUEST__("key", (() => ({"entityId":"123","videos":{"videoList":{"v720P":{"url":"https://v1.pinimg.com/example_720w.mp4"}}}}))());']){
+    assert.throws(()=>parseVideo(`<script data-relay-completed-request="true">${body}</script>`,'123'),{code:'NO_MP4'});
+  }
+  assert.throws(()=>parseVideo(`<script>window.__PWS_RELAY_REGISTER_COMPLETED_REQUEST__("key", {"entityId":"123","videos":{"videoList":{"v720P":{"url":"${mp4}"}}}});</script>`,'123'),{code:'NO_MP4'});
+  assert.equal(globalThis.injection,undefined);
+});
 test('nested recommendation inside requested pin never replaces its own video',()=>{
   const pin={id:'123',videos:{video_list:{own:{url:mp4,width:720,height:1280}}},related_pins:[{id:'999',videos:{video_list:{other:{url:'https://v1.pinimg.com/unrelated.mp4',width:4000,height:4000}}}}]};
   const html=`<script id="__PWS_DATA__" type="application/json">${JSON.stringify(pin)}</script>`;

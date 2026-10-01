@@ -26,19 +26,6 @@ const bytes=new Uint8Array([0,0,0,24,102,116,121,112,105,115,111,109,0,0,0,0,65,
 const video={url:'https://v1.pinimg.com/example.mp4',pinId:'321',duration:16};
 const primary='<script id="video-snippet" type="application/ld+json">{"@type":"VideoObject","contentUrl":"https://v1.pinimg.com/example.mp4"}</script>';
 
-test('temporary Pinterest probe verifies the fixed public MP4 without using Telegram credentials',async()=>{
-  const response=await handleRequest(new Request('https://bot.example/diagnostics/pinterest'),{},async(url,opts)=>{
-    assert.equal(opts.redirect,'manual');
-    assert.ok(!opts.headers?.authorization);
-    if(url==='https://www.pinterest.com/pin/914090055622372740/')return new Response(primary);
-    assert.equal(url,video.url);
-    return new Response(bytes,{headers:{'content-type':'video/mp4'}});
-  });
-  assert.equal(response.status,200);
-  assert.deepEqual(await response.json(),{ok:true,pinId:'914090055622372740',bytes:bytes.length,format:'mp4'});
-  assert.equal(response.headers.get('cache-control'),'no-store');
-});
-
 test('wrong webhook secret and foreign users never reach Telegram or database claim',async()=>{
   const {env,sql}=environment();
   const noNetwork=()=>{throw Error('network forbidden');};

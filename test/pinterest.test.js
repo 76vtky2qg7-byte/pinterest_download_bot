@@ -46,3 +46,16 @@ test('HTTP extraction validates response and rejects excessive HTML', async () =
   await assert.rejects(()=>getVideo('https://pinterest.com/pin/123/',async()=>new Response('forbidden',{status:403})));
   await assert.rejects(()=>getVideo('https://pinterest.com/pin/123/',async()=>new Response('x',{headers:{'content-length':'9000000'}})));
 });
+test('missing video reports safe response diagnostics without echoing upstream content', async () => {
+  const html='<html><script id="__PWS_DATA__">{"private":"do-not-echo","url":"https://v1.pinimg.com/a.m3u8"}</script></html>';
+  await assert.rejects(()=>getVideo('https://pinterest.com/pin/123/',async()=>new Response(html)),error=>{
+    assert.equal(error.code,'NO_MP4');
+    assert.match(error.message,/diag1/);
+    assert.match(error.message,/mp4=0/);
+    assert.match(error.message,/hls=1/);
+    assert.match(error.message,/__PWS_DATA__/);
+    assert.ok(!error.message.includes('do-not-echo'));
+    assert.ok(!error.message.includes('https://v1.pinimg.com'));
+    return true;
+  });
+});

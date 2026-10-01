@@ -99,5 +99,13 @@ export async function getVideo(input, fetcher = fetch, signal) {
   const response = await fetcher(pin.url, { redirect: 'manual', signal, headers: { 'accept': 'text/html' } });
   if (!response.ok) { await response.body?.cancel(); throw new BotError('PINTEREST_HTTP', `Pinterest вернул HTTP ${response.status}. Попробуй позже.`); }
   const html = new TextDecoder().decode(await readLimited(response, 5_000_000));
-  return { ...parseVideo(html, pin.id), pinId: pin.id };
+  try {
+    return { ...parseVideo(html, pin.id), pinId: pin.id };
+  } catch (error) {
+    if (!(error instanceof BotError) || error.code !== 'NO_MP4') throw error;
+    // Only bounded structural facts, never upstream text, cookies or media URLs.
+    const ids = [...html.matchAll(/<script\b[^>]*\bid\s*=\s*["']([\w-]{1,60})["']/gi)].map(m=>m[1]).slice(0,12);
+    const count = pattern => [...html.matchAll(pattern)].length;
+    throw new BotError('NO_MP4', `Pinterest не отдал распознаваемый MP4. Пришли этот ответ для диагностики.\n[diag1 pin=${pin.id}; html=${html.length}; scripts=${count(/<script\b/gi)}; mp4=${count(/\.mp4/gi)}; hls=${count(/\.m3u8/gi)}; schema=${html.includes('video-snippet')?1:0}; rsc=${html.includes('self.__next_f.push')?1:0}; ids=${ids.join(',') || '-'}]`);
+  }
 }
